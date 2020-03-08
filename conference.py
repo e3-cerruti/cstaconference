@@ -135,6 +135,9 @@ def main():
             'summary': website_event['title'],
             'description': description,
             'transparency': 'transparent',
+            'reminders': {
+                'useDefaults': False
+            },
             'start': {
                 'dateTime': date_time_from(website_event['Start Date: '], website_event['Start Time: ']),
                 'timeZone': 'America/New_York'
