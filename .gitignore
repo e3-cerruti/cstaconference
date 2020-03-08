@@ -216,5 +216,6 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-credentials.json
-token.pickle
+/credentials.json
+/token.pickle
+/filter.json

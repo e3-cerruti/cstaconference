@@ -1,3 +1,4 @@
+import json
 import urllib2
 
 from lxml import html
@@ -106,30 +107,43 @@ def get_website_events():
     return events
 
 
+def get_categories():
+    with open('categories.json') as f:
+        categories = json.load(f)
+
+    for category in categories:
+        category['key'] = u'{}|'.format(category['name'].lower().replace(' ', '-'))
+        category['label'] = u'{}: '.format(category['name'])
+        category['values'] = []
+
+    return categories
+
+
+def put_filter_options(categories):
+    with open('filter.json', 'w') as f:
+        json.dump(categories, f)
+
+
 def main():
     service = get_service()
     csta_calendar = get_calendar(service)
     events = get_csta_events(service, csta_calendar)
     events_to_remove = list(events)
     website_events = get_website_events()
+    categories = get_categories()
 
     for website_event in website_events:
         existing_event = find_event_by_name(events, website_event['title'])
         if existing_event:
             events_to_remove.remove(existing_event)
 
-        description = website_event['description'] + '\n\n'
+        description = u'{}\n\n'.format(website_event['description'])
         if 'presenters' in website_event:
-            description += "Presenter(s): " + ', '.join(website_event['presenters']) + '\n'
+            description += u'{}\t{}\n'.format("Presenter(s):", ', '.join(website_event['presenters']))
 
-        if 'Computer Science Keywords: ' in website_event:
-            description += 'Computer Science Keywords: ' + website_event['Computer Science Keywords: '] + '\n'
-
-        if 'Pedagogy Keywords: ' in website_event:
-            description += 'Pedagogy Keywords: ' + website_event['Pedagogy Keywords: '] + '\n'
-
-        if 'Grade Levels Addressed: ' in website_event:
-            description += 'Grade Levels Addressed: ' + website_event['Grade Levels Addressed: '] + '\n'
+        for category in categories:
+            if category['label'] in website_event:
+                description += u'{}\t{}\n'.format(category['label'], website_event[category['label']])
 
         event = {
             'summary': website_event['title'],
@@ -151,20 +165,31 @@ def main():
         if 'Location: ' in website_event:
             event['location'] = website_event['Location: ']
 
-        shared_properties = {}
-        if 'Computer Science Keywords: ' in website_event:
-            shared_properties['computerScienceKeywords'] = website_event['Computer Science Keywords: '].split(",")
+        shared_properties = []
+        for category in categories:
+            if category['label'] in website_event:
+                category['values'] = list(
+                    set(category['values']) |
+                    set([value.strip() for value in website_event[category['label']].split(",")])
+                )
+                for category_value in category['values']:
+                    shared_properties.append(u'{}{}'.format(category['key'], category_value))
+            else:
+                category['values'] = list(
+                    set(category['values']) |
+                    set(['Undefined'])
+                )
+                shared_properties.append(u'{}{}'.format(category['key'], 'Undefined'))
 
-        if 'Pedagogy Keywords: ' in website_event:
-            shared_properties['pedagogyKeywords'] = website_event['Pedagogy Keywords: '].split(",")
-
-        if 'Grade Levels Addressed: ' in website_event.keys():
-            shared_properties['gradeLevelsAddressed'] = website_event['Grade Levels Addressed: '].split(",")
+        put_filter_options(categories)
 
         if shared_properties:
             event['extendedProperties'] = {
-                'shared': shared_properties
+                'shared': {
+                }
             }
+            for property_name in shared_properties:
+                event['extendedProperties']['shared'][property_name] = 'yes'
 
         if existing_event:
             event = service.events().patch(calendarId=csta_calendar, eventId=existing_event['id'], body=event).execute()
